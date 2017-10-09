@@ -14,8 +14,8 @@ using namespace std;
 int num = 0;
 int ibs = 512;
 int obs = 1024;
-int _SKIP = 10;
-int _SEEK = 0;
+int _SKIP = 2;
+int _SEEK = 1;
 const int N = 256;
 char *FName = "help"; 
 DWORD dwCreation = CREATE_NEW;
@@ -71,8 +71,15 @@ bool FileExists(LPCTSTR fname)
 }
 void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int tempIBS) {
 	DWORD  dwTemp, FileIterWr,nOBS = obs; int temp;
+	// подготавливаем поля структуры асинхронной операции
+	//OVERLAPPED gOverlapped;
+	//gOverlapped.Offset = _SEEK;
+	//gOverlapped.OffsetHigh = 0;
+	//gOverlapped.hEvent = 0;
 	if (FileExists(fileDest))
 		DeleteFile(fileDest);
+	//HANDLE hFile = CreateFile(fileDest, dwCreationAccess, 0, NULL,
+	//	dwCreation, FILE_FLAG_OVERLAPPED, NULL);
 	HANDLE hFile = CreateFile(fileDest, dwCreationAccess, 0, NULL,
 		dwCreation, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (INVALID_HANDLE_VALUE == hFile) {
@@ -83,6 +90,7 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 		FileIterWr = (FileSize / obs) + 1;
 	}
 	else FileIterWr = 1;
+	if (_SEEK > FileIterWr - 1) return;
 	char** masWr = new char*[FileIterWr];
 	for (int i = 0; i < FileIterWr; i++) {
 		if (i == FileIterWr - 1)
@@ -115,10 +123,20 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 
 		}
 	}
-	for (int i = 0; i < FileIterWr; i++) {
-		if (i == FileIterWr - 1)
-			nOBS = temp-3;
-		WriteFile(hFile, masWr[i], nOBS, &dwTemp, NULL);
+	for (int i = _SEEK; i < FileIterWr; i++) {
+		if (i == FileIterWr - 1) {
+			nOBS = temp - 3;
+			//gOverlapped.Offset -= _SEEK;
+			//WriteFile(hFile, masWr[i], nOBS, &dwTemp, &gOverlapped);
+			WriteFile(hFile, masWr[i], nOBS, &dwTemp, NULL);
+		}
+		else {
+			//WriteFile(hFile, masWr[i], nOBS, &dwTemp, &gOverlapped);
+			//gOverlapped.Offset += nOBS;
+			//gOverlapped.OffsetHigh = 0;
+			WriteFile(hFile, masWr[i], nOBS, &dwTemp, NULL);
+			int count = 0;
+		}
 	}
 	CloseHandle(hFile);
 }
@@ -127,19 +145,23 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	OVERLAPPED gOverlapped;
 	DWORD  dwTemp, FileSize, FileIter, nIBS = ibs;
 	// подготавливаем поля структуры асинхронной операции
-	gOverlapped.Offset = _SKIP;
+	gOverlapped.Offset = _SKIP*ibs;
 	gOverlapped.OffsetHigh = 0;
 	gOverlapped.hEvent = 0;
 	int i, str; int temp;
 	
 	HANDLE fin = CreateFile(file, GENERIC_READ, 0, NULL,
 		OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+	//HANDLE fin = CreateFile(file, GENERIC_READ, 0, NULL,
+	//	OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	FileSize = GetFileSize(fin, NULL);
 	if ((FileSize / ibs) > 0) {
 		temp = (FileSize%ibs);
 		FileIter = (FileSize / ibs)+1;
 	}
 	else FileIter = 1;
+	if (_SKIP > FileIter - 1) return;
+	else FileIter -= _SKIP;
 	char** mass = new char*[FileIter];
 	for (int i = 0; i < FileIter; i++) {
 		if(i== FileIter-1)
@@ -148,19 +170,24 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	}
 	for (int i = 0; i < FileIter; i++) {
 		if (i == FileIter - 1) {
+			
+			//gOverlapped.Offset -= nIBS;
 			nIBS = temp;
-			gOverlapped.Offset -= _SKIP;
+			//gOverlapped.Offset = nIBS-ibs;
 			ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			//ReadFile(fin, mass[i], nIBS, &dwTemp, NULL);
 			mass[i][temp] = '\0';
 		}
 		else {
 			ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			//ReadFile(fin, mass[i], nIBS, &dwTemp, NULL);
+			int count = 0;
 			gOverlapped.Offset += nIBS;
 			gOverlapped.OffsetHigh = 0;
 		}
 
 	}
-	Writer(mass, fileDest, FileSize, FileIter, temp);
+	Writer(mass, fileDest, FileSize-(_SKIP*ibs), FileIter, temp);
 	CloseHandle(fin);
 }
 
