@@ -129,7 +129,7 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	// подготавливаем поля структуры асинхронной операции
 	gOverlapped.Offset = _SKIP;
 	gOverlapped.OffsetHigh = 0;
-	gOverlapped.hEvent = &dwTemp;
+	gOverlapped.hEvent = 0;
 	int i, str; int temp;
 	
 	HANDLE fin = CreateFile(file, GENERIC_READ, 0, NULL,
@@ -149,10 +149,16 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	for (int i = 0; i < FileIter; i++) {
 		if (i == FileIter - 1) {
 			nIBS = temp;
+			gOverlapped.Offset -= _SKIP;
 			ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
 			mass[i][temp] = '\0';
 		}
-		else ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+		else {
+			ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			gOverlapped.Offset += nIBS;
+			gOverlapped.OffsetHigh = 0;
+		}
+
 	}
 	Writer(mass, fileDest, FileSize, FileIter, temp);
 	CloseHandle(fin);
