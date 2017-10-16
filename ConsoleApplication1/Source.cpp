@@ -14,8 +14,9 @@ using namespace std;
 int num = 0;
 int ibs = 512;
 int obs = 1024;
-int _SKIP = 2;
-int _SEEK = 1;
+int _SKIP = 0;
+int _SEEK = 0;
+int _COUNT = 0;
 const int N = 256;
 char *FName = "help"; 
 DWORD dwCreation = CREATE_NEW;
@@ -70,7 +71,7 @@ bool FileExists(LPCTSTR fname)
 	return false;
 }
 void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int tempIBS) {
-	DWORD  dwTemp, FileIterWr,nOBS = obs; int temp;
+	DWORD  dwTemp, FileIterWr, nOBS = obs; int temp; bool tmMnObs = false;
 	// подготавливаем поля структуры асинхронной операции
 	//OVERLAPPED gOverlapped;
 	//gOverlapped.Offset = _SEEK;
@@ -86,19 +87,25 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 		return;
 	}
 	if ((FileSize / obs) > 0) {
+		temp = 0;
 		temp = FileSize%obs;
 		FileIterWr = (FileSize / obs) + 1;
+		if (_SEEK > FileIterWr - 1) return;
 	}
-	else FileIterWr = 1;
-	if (_SEEK > FileIterWr - 1) return;
+	else {
+		temp = FileSize%obs;
+		FileIterWr = 1;
+		tmMnObs = true;
+	}
+	
 	char** masWr = new char*[FileIterWr];
 	for (int i = 0; i < FileIterWr; i++) {
-		if (i == FileIterWr - 1)
+		if (i == FileIterWr - 1&&temp>0)
 			masWr[i] = new char[temp];
 		else masWr[i] = new char[obs];
 	}
 	int tm = 0,z =0;
-	for (int i = 0; i < FileIter-1; i++) {
+	for (int i = 0; i < FileIter; i++) {
 		for (int j = 0; j < ibs; j++) {
 				if (tm < obs) {
 					masWr[z][tm] = mass[i][j];
@@ -111,18 +118,20 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 				}
 		}
 	}
-	for (int j = 0; j <= tempIBS; j++) {
-		if (tm < obs) {
-			masWr[z][tm] = mass[FileIter - 1][j];
-			tm++;
-		}
-		else {
-			z++;
-			tm = 0;
-			masWr[z][tm] = mass[FileIter - 1][j];
+	if(!tmMnObs)
+		for (int j = 0; j <= tempIBS; j++) {
+			if (tm < obs) {
+				masWr[z][tm] = mass[FileIter - 1][j];
+				tm++;
+			}
+			else {
+				z++;
+				tm = 0;
+				masWr[z][tm] = mass[FileIter - 1][j];
 
+			}
 		}
-	}
+	masWr[z][tm] = '\0';
 	for (int i = _SEEK; i < FileIterWr; i++) {
 		if (i == FileIterWr - 1) {
 			nOBS = temp - 3;
@@ -143,7 +152,7 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 
 void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	OVERLAPPED gOverlapped;
-	DWORD  dwTemp, FileSize, FileIter, nIBS = ibs;
+	DWORD  dwTemp, FileSize, FileIter, nIBS = ibs, oldFileIter;
 	// подготавливаем поля структуры асинхронной операции
 	gOverlapped.Offset = _SKIP*ibs;
 	gOverlapped.OffsetHigh = 0;
@@ -162,14 +171,16 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	else FileIter = 1;
 	if (_SKIP > FileIter - 1) return;
 	else FileIter -= _SKIP;
+	if (_COUNT > FileIter - 1) return;
+	else { oldFileIter = FileIter; FileIter = _COUNT;  }
 	char** mass = new char*[FileIter];
 	for (int i = 0; i < FileIter; i++) {
-		if(i== FileIter-1)
+		if (i == (FileIter - 1) && i == oldFileIter - 1) 
 			mass[i] = new char[temp];
 		else mass[i] = new char[ibs];
 	}
 	for (int i = 0; i < FileIter; i++) {
-		if (i == FileIter - 1) {
+		if (i == (FileIter - 1)&&i== oldFileIter-1){
 			
 			//gOverlapped.Offset -= nIBS;
 			nIBS = temp;
@@ -187,7 +198,7 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 		}
 
 	}
-	Writer(mass, fileDest, FileSize-(_SKIP*ibs), FileIter, temp);
+	Writer(mass, fileDest, FileIter*ibs, FileIter, temp);
 	CloseHandle(fin);
 }
 
@@ -197,8 +208,13 @@ void StartValue(char *value, int nextValue) {
 	if (strcmp(value, "-obs") == 0)
 		obs = nextValue;
 	if (strcmp(value, "-bs") == 0){ ibs = nextValue; obs = nextValue; }
+	if (strcmp(value, "-seek") == 0) _SEEK = nextValue;
+	if (strcmp(value, "-skip") == 0) _SKIP = nextValue;
+	if (strcmp(value, "-count") == 0) _COUNT = nextValue;
 }
+void Conv(char *value, char **conv) {
 
+}
 int main(int argc, char *argv[]) {
 	setlocale(LC_ALL, "Russian");
 	
@@ -208,7 +224,7 @@ int main(int argc, char *argv[]) {
 			Help();
 		}
 		for (int i = 1; i < argc - 2; i++) {
-			int valueI = 0, valueZ = 0, nextValueI = 0, nextValueZ = 0;
+			int valueI = 0, valueZ = 0, nextValueI = 0, nextValueZ = 0; int zap = 0; int colZap[10]; int m = 0;
 			char *value, *nextValue; bool go = false; bool goNext = false;
 			const char *oldname = argv[i];
 			for (int j = 0; j < strlen(oldname); j++) {
@@ -219,6 +235,7 @@ int main(int argc, char *argv[]) {
 				if (argv[i][j] == '=') goNext = true;
 				if (goNext) nextValueI++;
 			}
+			goNext = false;
 			value = new char[valueI];
 			nextValue = new char[nextValueI];
 			for (int j = 0; j < strlen(oldname); j++) {
@@ -228,36 +245,33 @@ int main(int argc, char *argv[]) {
 			for (int j = valueZ; j < strlen(oldname); j++) {
 				if (argv[i][j] == '=')
 					go = true;
-				else if (go) {nextValue[nextValueZ] = argv[i][j]; nextValueZ++; }
+				else if (go) { nextValue[nextValueZ] = argv[i][j]; nextValueZ++; }
 			}
+			go = false;
 			value[valueZ] = '\0'; nextValue[nextValueZ] = '\0';
-			StartValue(value, atoi(nextValue));
+			if (strcmp(value, "-conv")==0) {
+				for (int j = 0; j < 10; j++) colZap[j] = 0;
+				for (int j = 0; j < nextValueZ; j++) {
+					if (nextValue[j] == ',') zap++;
+					colZap[zap]++;
+				}
+				char ** conv = new char*[zap+1];
+				for (int j = 0; j <= zap; j++) conv[j] = new char[colZap[j]];
+				zap = 0;
+				for (int j = 0; j < nextValueZ; j++) {
+					if (nextValue[j] == ',') {
+						conv[zap][m] = '\0'; zap++; m = 0; continue;
+					}
+					conv[zap][m] = nextValue[j];
+					m++;
+				}
+				Conv(value, conv);
+			}
+			else StartValue(value, atoi(nextValue));
 			value = NULL; nextValue = NULL;
 		}
 	}
 	ReadFile(CharToLPWSTR(argv[argc - 2]), CharToLPWSTR(argv[argc - 1]));
-	/*
-	if (argc >= 4) {
-		//cout << argv[argc - 3][1];
-		if (argv[argc - 3][1] == 'T') {
-			DestType = 0;
-			if (check(CharToLPWSTR(argv[argc - 2]))) {
-				cout << "file not exist\n or file not a dir";
-				return 0;
-			}
-			GoNext(argv[argc - 4], CharToLPWSTR(argv[argc - 2]), CharToLPWSTR(argv[argc - 1]));
-		}
-		else if (argv[argc - 3][1] == 't') {
-			DestType = 1;
-			if (check(CharToLPWSTR(argv[argc - 2])) == true) {
-				cout << "file not exist\n or file not a dir";
-				return 0;
-			}
-			GoNext(argv[argc - 4], CharToLPWSTR(argv[argc - 2]), CharToLPWSTR(argv[argc - 1]));
-		}
-		else GoNext(argv[argc - 3], CharToLPWSTR(argv[argc - 2]), CharToLPWSTR(argv[argc - 1]));
-	}
-	*/
 	if (argc == 1) {
 		Helper();
 		//choose('-v', "E:\\help.txt", "E:\\help1.txt"); //debug
