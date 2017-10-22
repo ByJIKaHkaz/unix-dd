@@ -13,10 +13,19 @@
 using namespace std;
 int num = 0;
 int ibs = 512;
-int obs = 1024;
+int obs = 2048;
 int _SKIP = 0;
 int _SEEK = 0;
 int _COUNT = 0;
+int cbs = 512;
+bool _notrunc = false;
+bool _sync = false; int _syncCount = 0; int _writeTempCount = 0;
+bool _noerror = false;
+bool _lcase = false;
+bool _ucase = false;
+bool _block = false;
+bool _unblock = false;
+bool _swabb = false;
 const int N = 256;
 char *FName = "help"; 
 DWORD dwCreation = CREATE_NEW;
@@ -88,7 +97,7 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 	}
 	if ((FileSize / obs) > 0) {
 		temp = 0;
-		temp = FileSize%obs;
+		temp = (FileSize%obs);
 		FileIterWr = (FileSize / obs) + 1;
 		if (_SEEK > FileIterWr - 1) return;
 	}
@@ -105,8 +114,11 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 		else masWr[i] = new char[obs];
 	}
 	int tm = 0,z =0;
-	for (int i = 0; i < FileIter; i++) {
-		for (int j = 0; j < ibs; j++) {
+	if (tempIBS == 0&&FileIter>1)
+		FileIter -= 1;
+	if (!_swabb) {
+		for (int i = 0; i < FileIter; i++) {
+			for (int j = 0; j < ibs; j++) {
 				if (tm < obs) {
 					masWr[z][tm] = mass[i][j];
 					tm++;
@@ -116,10 +128,43 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 					masWr[z][tm] = mass[i][j];
 					tm = 0;
 				}
+				if (j == ibs - 1 && _block)
+					if (masWr[z][tm] == '\n')
+						masWr[z][tm] = ' ';
+				if (j == ibs - 1 && _unblock)
+					if (masWr[z][tm] == ' ')
+						masWr[z][tm] = '\n';
+			}
+		}
+	}
+	char temmm ;
+	if (_swabb) {
+		for (int i = 0; i < FileIter; i++) {
+			for (int j = 0; j < ibs; j++) {
+				if (tm < obs) {
+					if (j == ibs - 1)
+						masWr[z][tm] = mass[i][j];
+					else masWr[z][tm] = mass[i][j+1];
+					tm++;
+					masWr[z][tm] = mass[i][j];
+					tm++; j++;
+				}
+				else {
+					z++;
+					masWr[z][tm] = mass[i][j];
+					tm = 0;
+				}
+				if (j == ibs - 1 && _block)
+					if (masWr[z][tm] == '\n')
+						masWr[z][tm] = ' ';
+				if (j == ibs - 1 && _unblock)
+					if (masWr[z][tm] == ' ')
+						masWr[z][tm] = '\n';
+			}
 		}
 	}
 	if(!tmMnObs)
-		for (int j = 0; j <= tempIBS; j++) {
+		for (int j = 0; j < tempIBS; j++) {
 			if (tm < obs) {
 				masWr[z][tm] = mass[FileIter - 1][j];
 				tm++;
@@ -132,12 +177,19 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 			}
 		}
 	masWr[z][tm] = '\0';
+	DWORD nnOBS = obs;
+	if (!_notrunc)
+		for (int i = 0; i < obs; i++)
+			if (masWr[FileIterWr - 1][i] == -51) {
+				nnOBS = i;
+				break;
+			}
+			
 	for (int i = _SEEK; i < FileIterWr; i++) {
 		if (i == FileIterWr - 1) {
-			nOBS = temp - 3;
 			//gOverlapped.Offset -= _SEEK;
 			//WriteFile(hFile, masWr[i], nOBS, &dwTemp, &gOverlapped);
-			WriteFile(hFile, masWr[i], nOBS, &dwTemp, NULL);
+			WriteFile(hFile, masWr[i], nnOBS, &dwTemp, NULL);
 		}
 		else {
 			//WriteFile(hFile, masWr[i], nOBS, &dwTemp, &gOverlapped);
@@ -163,34 +215,63 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 		OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
 	//HANDLE fin = CreateFile(file, GENERIC_READ, 0, NULL,
 	//	OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	FileSize = GetFileSize(fin, NULL);
+	FileSize = GetFileSize(fin, NULL); temp = 0;
 	if ((FileSize / ibs) > 0) {
-		temp = (FileSize%ibs);
 		FileIter = (FileSize / ibs)+1;
+		if (!_notrunc && !_sync) {
+			temp = 0;
+			FileIter = (FileSize / ibs);
+		}
+		else if(!_sync&&_notrunc)
+			temp = ibs;
+		else if ((_sync && !_notrunc)|| (_sync && _notrunc)) {
+			_syncCount = (FileSize%ibs);
+			temp = ibs;
+		}
 	}
 	else FileIter = 1;
 	if (_SKIP > FileIter - 1) return;
 	else FileIter -= _SKIP;
 	if (_COUNT > FileIter - 1) return;
-	else { oldFileIter = FileIter; FileIter = _COUNT;  }
+	else if(_COUNT!=0)
+	{ oldFileIter = FileIter; FileIter = _COUNT;  }
+	else  oldFileIter = FileIter;
 	char** mass = new char*[FileIter];
 	for (int i = 0; i < FileIter; i++) {
-		if (i == (FileIter - 1) && i == oldFileIter - 1) 
-			mass[i] = new char[temp];
+		if (i == (FileIter - 1) && i == oldFileIter - 1&&i>0)
+			if(temp>0)
+				mass[i] = new char[temp];
+			else continue;
 		else mass[i] = new char[ibs];
 	}
+	if(_sync)
+		for (int i = _syncCount; i <= ibs; i++) {
+			mass[FileIter - 1][i] = '\0';
+		}
 	for (int i = 0; i < FileIter; i++) {
-		if (i == (FileIter - 1)&&i== oldFileIter-1){
+		
+		if (i == (FileIter - 1)&&i== oldFileIter-1&&temp>0){
 			
 			//gOverlapped.Offset -= nIBS;
 			nIBS = temp;
 			//gOverlapped.Offset = nIBS-ibs;
-			ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			try {
+				ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			}
+			catch (exception e) {
+				if (_noerror)
+					i++;
+			}
 			//ReadFile(fin, mass[i], nIBS, &dwTemp, NULL);
 			mass[i][temp] = '\0';
 		}
 		else {
-			ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			try {
+				ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+			}
+			catch (exception e) { 
+				if(_noerror)
+					i++; }
 			//ReadFile(fin, mass[i], nIBS, &dwTemp, NULL);
 			int count = 0;
 			gOverlapped.Offset += nIBS;
@@ -198,7 +279,9 @@ void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 		}
 
 	}
+
 	Writer(mass, fileDest, FileIter*ibs, FileIter, temp);
+	
 	CloseHandle(fin);
 }
 
@@ -208,12 +291,33 @@ void StartValue(char *value, int nextValue) {
 	if (strcmp(value, "-obs") == 0)
 		obs = nextValue;
 	if (strcmp(value, "-bs") == 0){ ibs = nextValue; obs = nextValue; }
+	if (strcmp(value, "-cbs") == 0) { cbs = nextValue; }
 	if (strcmp(value, "-seek") == 0) _SEEK = nextValue;
 	if (strcmp(value, "-skip") == 0) _SKIP = nextValue;
 	if (strcmp(value, "-count") == 0) _COUNT = nextValue;
 }
-void Conv(char *value, char **conv) {
+void Conv(int zap, char **conv) {
+	for (int i = 0; i <= zap; i++) {
+		/*if (strcmp(conv[i], "lcase"))
+			continue;
+		if (strcmp(conv[i], "ucase"))
+			continue;*/
+		if (strcmp(conv[i], "swab"))
+			_swabb=true;
+		if (strcmp(conv[i], "ascii"))
+			continue;
+		if (strcmp(conv[i], "block"))
+			_block=true;
+		if (strcmp(conv[i], "unblock"))
+			_unblock=true;
+		if (strcmp(conv[i], "noerror"))
+			_noerror=true;
+		if (strcmp(conv[i], "notrunc")==0)
+			_notrunc = true;
+		if (strcmp(conv[i], "sync")==0)
+			_sync = true;
 
+	}
 }
 int main(int argc, char *argv[]) {
 	setlocale(LC_ALL, "Russian");
@@ -265,7 +369,8 @@ int main(int argc, char *argv[]) {
 					conv[zap][m] = nextValue[j];
 					m++;
 				}
-				Conv(value, conv);
+				conv[zap][m] = '\0';
+				Conv(zap, conv);
 			}
 			else StartValue(value, atoi(nextValue));
 			value = NULL; nextValue = NULL;
