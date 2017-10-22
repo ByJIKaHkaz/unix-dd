@@ -17,6 +17,7 @@ int obs = 2048;
 int _SKIP = 0;
 int _SEEK = 0;
 int _COUNT = 0;
+bool _ansi = false;
 int cbs = 512;
 bool _notrunc = false;
 bool _sync = false; int _syncCount = 0; int _writeTempCount = 0;
@@ -79,6 +80,34 @@ bool FileExists(LPCTSTR fname)
 	}
 	return false;
 }
+char up(char a) {
+
+		if (iswlower(a))
+			a = towupper(a);
+		else return a;
+	return a;
+}
+char low(char a) {
+	
+	if (iswupper(a))
+		a = towlower(a);
+	else return a;
+	return a;
+}
+wstring AnsiToWide(const string& in_sAnsi)
+{
+	wstring wsWide;
+	wsWide.resize(in_sAnsi.length(), 0);
+	MultiByteToWideChar(
+		CP_ACP,
+		0,
+		&in_sAnsi[0],
+		(int)in_sAnsi.length(),
+		&wsWide[0],
+		(int)wsWide.length());
+
+	return wsWide;
+}
 void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int tempIBS) {
 	DWORD  dwTemp, FileIterWr, nOBS = obs; int temp; bool tmMnObs = false;
 	// подготавливаем поля структуры асинхронной операции
@@ -120,12 +149,20 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 		for (int i = 0; i < FileIter; i++) {
 			for (int j = 0; j < ibs; j++) {
 				if (tm < obs) {
-					masWr[z][tm] = mass[i][j];
+					if(_lcase)
+						masWr[z][tm] = up(mass[i][j]);
+					else if(_ucase)
+						masWr[z][tm] = low(mass[i][j]);
+					else masWr[z][tm] = mass[i][j];
 					tm++;
 				}
 				else {
 					z++;
-					masWr[z][tm] = mass[i][j];
+					if (_lcase)
+						masWr[z][tm] = up(mass[i][j]);
+					else if (_ucase)
+						masWr[z][tm] = low(mass[i][j]);
+					else masWr[z][tm] = mass[i][j];
 					tm = 0;
 				}
 				if (j == ibs - 1 && _block)
@@ -142,16 +179,35 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 		for (int i = 0; i < FileIter; i++) {
 			for (int j = 0; j < ibs; j++) {
 				if (tm < obs) {
-					if (j == ibs - 1)
-						masWr[z][tm] = mass[i][j];
-					else masWr[z][tm] = mass[i][j+1];
+					if (j == ibs - 1) {
+						if (_lcase)
+							masWr[z][tm] = up(mass[i][j]);
+						else if (_ucase)
+							masWr[z][tm] = low(mass[i][j]);
+						else masWr[z][tm] = mass[i][j];
+					}
+					else {
+						if (_lcase)
+							masWr[z][tm] = up(mass[i][j+1]);
+						else if (_ucase)
+							masWr[z][tm] = low(mass[i][j+1]);
+						else masWr[z][tm] = mass[i][j+1];
+					}
 					tm++;
-					masWr[z][tm] = mass[i][j];
+					if (_lcase)
+						masWr[z][tm] = up(mass[i][j]);
+					else if (_ucase)
+						masWr[z][tm] = low(mass[i][j]);
+					else masWr[z][tm] = mass[i][j];
 					tm++; j++;
 				}
 				else {
 					z++;
-					masWr[z][tm] = mass[i][j];
+					if (_lcase)
+						masWr[z][tm] = up(mass[i][j]);
+					else if (_ucase)
+						masWr[z][tm] = low(mass[i][j]);
+					else masWr[z][tm] = mass[i][j];
 					tm = 0;
 				}
 				if (j == ibs - 1 && _block)
@@ -177,18 +233,23 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 			}
 		}
 	masWr[z][tm] = '\0';
-	DWORD nnOBS = obs;
-	if (!_notrunc)
-		for (int i = 0; i < obs; i++)
-			if (masWr[FileIterWr - 1][i] == -51) {
+	DWORD nnOBS;
+	nnOBS = 0;
+		for (DWORD i = 0; i < obs; i++) {
+			if (masWr[FileIterWr - 1][i] == -51|| masWr[FileIterWr - 1][i]=='\0') {
 				nnOBS = i;
 				break;
 			}
+		}
 			
 	for (int i = _SEEK; i < FileIterWr; i++) {
-		if (i == FileIterWr - 1) {
+		if (i == FileIterWr - 1|| FileIterWr==1) {
 			//gOverlapped.Offset -= _SEEK;
 			//WriteFile(hFile, masWr[i], nOBS, &dwTemp, &gOverlapped);
+			if (_ansi) {
+				wstring wstr = AnsiToWide(masWr[i]);
+				WriteFile(hFile, (LPCVOID)&wstr[0], nnOBS, &dwTemp, NULL);
+			}
 			WriteFile(hFile, masWr[i], nnOBS, &dwTemp, NULL);
 		}
 		else {
@@ -298,19 +359,19 @@ void StartValue(char *value, int nextValue) {
 }
 void Conv(int zap, char **conv) {
 	for (int i = 0; i <= zap; i++) {
-		/*if (strcmp(conv[i], "lcase"))
-			continue;
-		if (strcmp(conv[i], "ucase"))
-			continue;*/
-		if (strcmp(conv[i], "swab"))
+		if (strcmp(conv[i], "lcase")==0)
+			_lcase=true;
+		if (strcmp(conv[i], "ucase")==0)
+			_ucase=true;
+		if (strcmp(conv[i], "swab")==0)
 			_swabb=true;
-		if (strcmp(conv[i], "ascii"))
-			continue;
-		if (strcmp(conv[i], "block"))
+		if (strcmp(conv[i], "ascii") == 0)
+			_ansi = true;
+		if (strcmp(conv[i], "block")==0)
 			_block=true;
-		if (strcmp(conv[i], "unblock"))
+		if (strcmp(conv[i], "unblock")==0)
 			_unblock=true;
-		if (strcmp(conv[i], "noerror"))
+		if (strcmp(conv[i], "noerror")==0)
 			_noerror=true;
 		if (strcmp(conv[i], "notrunc")==0)
 			_notrunc = true;
