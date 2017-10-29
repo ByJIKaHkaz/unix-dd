@@ -11,6 +11,7 @@
 #include <TCHAR.H>
 
 using namespace std;
+DWORD FileSize = 0, FileIter=0, FileIterWr=0;
 int num = 0;
 int ibs = 512;
 int obs = 2048;
@@ -28,7 +29,7 @@ bool _block = false;
 bool _unblock = false;
 bool _swabb = false;
 const int N = 256;
-char *FName = "help"; 
+char *FName = "help";
 DWORD dwCreation = CREATE_NEW;
 DWORD dwCreationAccess = GENERIC_WRITE;
 
@@ -82,13 +83,13 @@ bool FileExists(LPCTSTR fname)
 }
 char up(char a) {
 
-		if (iswlower(a))
-			a = towupper(a);
-		else return a;
+	if (iswlower(a))
+		a = towupper(a);
+	else return a;
 	return a;
 }
 char low(char a) {
-	
+
 	if (iswupper(a))
 		a = towlower(a);
 	else return a;
@@ -108,8 +109,88 @@ wstring AnsiToWide(const string& in_sAnsi)
 
 	return wsWide;
 }
-void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int tempIBS) {
-	DWORD  dwTemp, FileIterWr, nOBS = obs; int temp; bool tmMnObs = false;
+
+void FormingFinalMas(char **mass1, char **mass2) {
+	int tm = 0, z = 0;
+	for (int i = 0; i <= FileIter; i++) {
+		for (int j = 0; j < ibs; j++) {
+			if (tm < obs) {
+				if (_lcase)
+					mass1[z][tm] = up(mass2[i][j]);
+				else if (_ucase)
+					mass1[z][tm] = low(mass2[i][j]);
+				else mass1[z][tm] = mass2[i][j];
+				tm++;
+			}
+			else {
+				if (z == FileIterWr) break;
+				z++; tm = 0;
+				if (_lcase)
+					mass1[z][tm] = up(mass2[i][j]);
+				else if (_ucase)
+					mass1[z][tm] = low(mass2[i][j]);
+				else mass1[z][tm] = mass2[i][j];
+				tm ++;
+			}
+			if (j == ibs - 1 && _block)
+				if (mass1[z][tm] == '\n')
+					mass1[z][tm] = ' ';
+			if (j == ibs - 1 && _unblock)
+				if (mass1[z][tm] == ' ')
+					mass1[z][tm] = '\n';
+			j == ibs - 1 ? mass1[z][tm] = 0 : false;
+		}
+		if (i == FileIter) mass1[z][tm]= 0;
+	}
+	
+}
+void FormingFinalSwabMas(char **masWr, char **mass) {
+	int tm = 0, z = 0;
+	for (int i = 0; i <= FileIter; i++) {
+		for (int j = 0; j < ibs; j++) {
+			if (tm <= obs) {
+				if (j == ibs - 1) {
+					if (_lcase)
+						masWr[z][tm] = up(mass[i][j]);
+					else if (_ucase)
+						masWr[z][tm] = low(mass[i][j]);
+					else masWr[z][tm] = mass[i][j];
+				}
+				else {
+					if (_lcase)
+						masWr[z][tm] = up(mass[i][j + 1]);
+					else if (_ucase)
+						masWr[z][tm] = low(mass[i][j + 1]);
+					else masWr[z][tm] = mass[i][j + 1];
+				}
+				tm++;
+				if (_lcase)
+					masWr[z][tm] = up(mass[i][j]);
+				else if (_ucase)
+					masWr[z][tm] = low(mass[i][j]);
+				else masWr[z][tm] = mass[i][j];
+				tm++; j++;
+			}
+			else {
+				z++; tm = 0;
+				if (_lcase)
+					masWr[z][tm] = up(mass[i][j]);
+				else if (_ucase)
+					masWr[z][tm] = low(mass[i][j]);
+				else masWr[z][tm] = mass[i][j];
+				tm++;
+			}
+			if (j == ibs - 1 && _block)
+				if (masWr[z][tm] == '\n')
+					masWr[z][tm] = ' ';
+			if (j == ibs - 1 && _unblock)
+				if (masWr[z][tm] == ' ')
+					masWr[z][tm] = '\n';
+		}
+	}
+}
+void Writer(char **mass, LPCTSTR fileDest, DWORD Filesize, DWORD FileIter) {
+	DWORD  dwTemp, nOBS = obs; int temp; bool tmMnObs = false;
 	// подготавливаем поля структуры асинхронной операции
 	//OVERLAPPED gOverlapped;
 	//gOverlapped.Offset = _SEEK;
@@ -124,132 +205,33 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 	if (INVALID_HANDLE_VALUE == hFile) {
 		return;
 	}
-	if ((FileSize / obs) > 0) {
-		temp = 0;
-		temp = (FileSize%obs);
-		FileIterWr = (FileSize / obs) + 1;
-		if (_SEEK > FileIterWr - 1) return;
-	}
-	else {
-		temp = FileSize%obs;
-		FileIterWr = 1;
-		tmMnObs = true;
-	}
-	
-	char** masWr = new char*[FileIterWr];
-	for (int i = 0; i < FileIterWr; i++) {
-		if (i == FileIterWr - 1&&temp>0)
-			masWr[i] = new char[temp];
-		else masWr[i] = new char[obs];
-	}
-	int tm = 0,z =0;
-	if (tempIBS == 0&&FileIter>1)
-		FileIter -= 1;
-	if (!_swabb) {
-		for (int i = 0; i < FileIter; i++) {
-			for (int j = 0; j < ibs; j++) {
-				if (tm < obs) {
-					if(_lcase)
-						masWr[z][tm] = up(mass[i][j]);
-					else if(_ucase)
-						masWr[z][tm] = low(mass[i][j]);
-					else masWr[z][tm] = mass[i][j];
-					tm++;
-				}
-				else {
-					z++;
-					if (_lcase)
-						masWr[z][tm] = up(mass[i][j]);
-					else if (_ucase)
-						masWr[z][tm] = low(mass[i][j]);
-					else masWr[z][tm] = mass[i][j];
-					tm = 0;
-				}
-				if (j == ibs - 1 && _block)
-					if (masWr[z][tm] == '\n')
-						masWr[z][tm] = ' ';
-				if (j == ibs - 1 && _unblock)
-					if (masWr[z][tm] == ' ')
-						masWr[z][tm] = '\n';
-			}
-		}
-	}
-	char temmm ;
-	if (_swabb) {
-		for (int i = 0; i < FileIter; i++) {
-			for (int j = 0; j < ibs; j++) {
-				if (tm < obs) {
-					if (j == ibs - 1) {
-						if (_lcase)
-							masWr[z][tm] = up(mass[i][j]);
-						else if (_ucase)
-							masWr[z][tm] = low(mass[i][j]);
-						else masWr[z][tm] = mass[i][j];
-					}
-					else {
-						if (_lcase)
-							masWr[z][tm] = up(mass[i][j+1]);
-						else if (_ucase)
-							masWr[z][tm] = low(mass[i][j+1]);
-						else masWr[z][tm] = mass[i][j+1];
-					}
-					tm++;
-					if (_lcase)
-						masWr[z][tm] = up(mass[i][j]);
-					else if (_ucase)
-						masWr[z][tm] = low(mass[i][j]);
-					else masWr[z][tm] = mass[i][j];
-					tm++; j++;
-				}
-				else {
-					z++;
-					if (_lcase)
-						masWr[z][tm] = up(mass[i][j]);
-					else if (_ucase)
-						masWr[z][tm] = low(mass[i][j]);
-					else masWr[z][tm] = mass[i][j];
-					tm = 0;
-				}
-				if (j == ibs - 1 && _block)
-					if (masWr[z][tm] == '\n')
-						masWr[z][tm] = ' ';
-				if (j == ibs - 1 && _unblock)
-					if (masWr[z][tm] == ' ')
-						masWr[z][tm] = '\n';
-			}
-		}
-	}
-	if(!tmMnObs)
-		for (int j = 0; j < tempIBS; j++) {
-			if (tm < obs) {
-				masWr[z][tm] = mass[FileIter - 1][j];
-				tm++;
-			}
-			else {
-				z++;
-				tm = 0;
-				masWr[z][tm] = mass[FileIter - 1][j];
+	(Filesize / obs) > 0 ? FileIterWr = (Filesize / obs)+1: FileIterWr = 1;
+	_SEEK > FileIterWr ? FileIterWr = 1 : FileIterWr -= _SEEK;
+	char** masWr = new char*[FileIterWr+1];
+	for (int i = 0; i <= FileIterWr; i++) masWr[i] = new char[obs];
 
-			}
-		}
-	masWr[z][tm] = '\0';
+	!_swabb? FormingFinalMas(masWr, mass): FormingFinalSwabMas(masWr, mass);
 	DWORD nnOBS;
 	nnOBS = 0;
-		for (DWORD i = 0; i < obs; i++) {
-			if (masWr[FileIterWr - 1][i] == -51|| masWr[FileIterWr - 1][i]=='\0') {
-				nnOBS = i;
-				break;
-			}
+	for (DWORD i = 0; i < obs; i++) {
+		if (FileIterWr > 0)
+		if (masWr[FileIterWr-1][i] == 0 || masWr[FileIterWr-1][i] == '\0') {
+			nnOBS = i;
+			break;
 		}
-			
+		else if (masWr[FileIterWr][i] == 0 || masWr[FileIterWr][i] == '\0') {
+			nnOBS = i;
+			break;
+		}
+	}
+
 	for (int i = _SEEK; i < FileIterWr; i++) {
-		if (i == FileIterWr - 1|| FileIterWr==1) {
-			//gOverlapped.Offset -= _SEEK;
-			//WriteFile(hFile, masWr[i], nOBS, &dwTemp, &gOverlapped);
+		if ((i == FileIterWr-1)|| (i == FileIterWr)) {
 			if (_ansi) {
 				wstring wstr = AnsiToWide(masWr[i]);
 				WriteFile(hFile, (LPCVOID)&wstr[0], nnOBS, &dwTemp, NULL);
 			}
+			if (nnOBS == 0) break;
 			WriteFile(hFile, masWr[i], nnOBS, &dwTemp, NULL);
 		}
 		else {
@@ -262,96 +244,65 @@ void Writer(char **mass, LPCTSTR fileDest, DWORD FileSize, DWORD FileIter, int t
 	}
 	CloseHandle(hFile);
 }
+void Forming(HANDLE hFile) {
+	bool countFalse = false;
+	FileSize = GetFileSize(hFile, NULL);
+	if ((FileSize / ibs) > 0)
+		FileIter = (FileSize / ibs);
+	else FileIter = 1;
+	(_SKIP > FileIter)? FileIter = 1 : FileIter -= _SKIP;
+	(_COUNT > FileIter) ? FileIter = 1 : countFalse = true;
+	if (countFalse) _COUNT == 0 ? FileIter : FileIter = _COUNT;
+	_syncCount = ibs - (FileSize % ibs);
+}
 
 void ReadFile(LPCTSTR file, LPCTSTR fileDest) {
 	OVERLAPPED gOverlapped;
-	DWORD  dwTemp, FileSize, FileIter, nIBS = ibs, oldFileIter;
+	DWORD  dwTemp, nIBS = ibs, oldFileIter;
 	// подготавливаем поля структуры асинхронной операции
 	gOverlapped.Offset = _SKIP*ibs;
 	gOverlapped.OffsetHigh = 0;
 	gOverlapped.hEvent = 0;
 	int i, str; int temp;
-	
+
 	HANDLE fin = CreateFile(file, GENERIC_READ, 0, NULL,
 		OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-	//HANDLE fin = CreateFile(file, GENERIC_READ, 0, NULL,
-	//	OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	FileSize = GetFileSize(fin, NULL); temp = 0;
-	if ((FileSize / ibs) > 0) {
-		FileIter = (FileSize / ibs)+1;
-		if (!_notrunc && !_sync) {
-			temp = 0;
-			FileIter = (FileSize / ibs);
-		}
-		else if(!_sync&&_notrunc)
-			temp = ibs;
-		else if ((_sync && !_notrunc)|| (_sync && _notrunc)) {
-			_syncCount = (FileSize%ibs);
-			temp = ibs;
-		}
-	}
-	else FileIter = 1;
-	if (_SKIP > FileIter - 1) return;
-	else FileIter -= _SKIP;
-	if (_COUNT > FileIter - 1) return;
-	else if(_COUNT!=0)
-	{ oldFileIter = FileIter; FileIter = _COUNT;  }
-	else  oldFileIter = FileIter;
+	//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//
+	//Forming
+	Forming(fin);
+	//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//
 	char** mass = new char*[FileIter];
-	for (int i = 0; i < FileIter; i++) {
-		if (i == (FileIter - 1) && i == oldFileIter - 1&&i>0)
-			if(temp>0)
-				mass[i] = new char[temp];
-			else continue;
-		else mass[i] = new char[ibs];
-	}
-	if(_sync)
-		for (int i = _syncCount; i <= ibs; i++) {
-			mass[FileIter - 1][i] = '\0';
-		}
-	for (int i = 0; i < FileIter; i++) {
-		
-		if (i == (FileIter - 1)&&i== oldFileIter-1&&temp>0){
-			
-			//gOverlapped.Offset -= nIBS;
-			nIBS = temp;
-			//gOverlapped.Offset = nIBS-ibs;
+	for (int i = 0; i <= FileIter; i++) mass[i] = new char[ibs];
+	//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//
+	//SYNC
+	if (_sync)
+		for (int i = _syncCount; i < ibs; i++) mass[FileIter][i] = 0;
+	else if (_notrunc) for (int i = _syncCount; i < ibs; i++) mass[FileIter][i] = '\0';
+	else for (int i = _syncCount; i < ibs; i++) mass[FileIter][i] = '\0';
+	//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//-//
+	for (int i = 0; i <= FileIter; i++) {
 			try {
-				ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
+				ReadFile(fin, mass[i], ibs, &dwTemp, &gOverlapped);
 			}
 			catch (exception e) {
 				if (_noerror)
 					i++;
 			}
-			//ReadFile(fin, mass[i], nIBS, &dwTemp, NULL);
-			mass[i][temp] = '\0';
-		}
-		else {
-			try {
-				ReadFile(fin, mass[i], nIBS, &dwTemp, &gOverlapped);
-			}
-			catch (exception e) { 
-				if(_noerror)
-					i++; }
-			//ReadFile(fin, mass[i], nIBS, &dwTemp, NULL);
-			int count = 0;
-			gOverlapped.Offset += nIBS;
+			gOverlapped.Offset += ibs;
 			gOverlapped.OffsetHigh = 0;
 		}
 
-	}
+	FileIter==0? Writer(mass, fileDest, ibs, FileIter): Writer(mass, fileDest, FileIter*ibs, FileIter);
 
-	Writer(mass, fileDest, FileIter*ibs, FileIter, temp);
-	
 	CloseHandle(fin);
 }
 
 void StartValue(char *value, int nextValue) {
-	if(strcmp(value,"-ibs")==0)
+	if (strcmp(value, "-ibs") == 0)
 		ibs = nextValue;
 	if (strcmp(value, "-obs") == 0)
 		obs = nextValue;
-	if (strcmp(value, "-bs") == 0){ ibs = nextValue; obs = nextValue; }
+	if (strcmp(value, "-bs") == 0) { ibs = nextValue; obs = nextValue; }
 	if (strcmp(value, "-cbs") == 0) { cbs = nextValue; }
 	if (strcmp(value, "-seek") == 0) _SEEK = nextValue;
 	if (strcmp(value, "-skip") == 0) _SKIP = nextValue;
@@ -359,32 +310,32 @@ void StartValue(char *value, int nextValue) {
 }
 void Conv(int zap, char **conv) {
 	for (int i = 0; i <= zap; i++) {
-		if (strcmp(conv[i], "lcase")==0)
-			_lcase=true;
-		if (strcmp(conv[i], "ucase")==0)
-			_ucase=true;
-		if (strcmp(conv[i], "swab")==0)
-			_swabb=true;
+		if (strcmp(conv[i], "lcase") == 0)
+			_lcase = true;
+		if (strcmp(conv[i], "ucase") == 0)
+			_ucase = true;
+		if (strcmp(conv[i], "swab") == 0)
+			_swabb = true;
 		if (strcmp(conv[i], "ascii") == 0)
 			_ansi = true;
-		if (strcmp(conv[i], "block")==0)
-			_block=true;
-		if (strcmp(conv[i], "unblock")==0)
-			_unblock=true;
-		if (strcmp(conv[i], "noerror")==0)
-			_noerror=true;
-		if (strcmp(conv[i], "notrunc")==0)
+		if (strcmp(conv[i], "block") == 0)
+			_block = true;
+		if (strcmp(conv[i], "unblock") == 0)
+			_unblock = true;
+		if (strcmp(conv[i], "noerror") == 0)
+			_noerror = true;
+		if (strcmp(conv[i], "notrunc") == 0)
 			_notrunc = true;
-		if (strcmp(conv[i], "sync")==0)
+		if (strcmp(conv[i], "sync") == 0)
 			_sync = true;
 
 	}
 }
 int main(int argc, char *argv[]) {
 	setlocale(LC_ALL, "Russian");
-	
+
 	if (argc > 1) {
-		
+
 		if (strcmp(argv[1], "--help") == 0) {
 			Help();
 		}
@@ -414,13 +365,13 @@ int main(int argc, char *argv[]) {
 			}
 			go = false;
 			value[valueZ] = '\0'; nextValue[nextValueZ] = '\0';
-			if (strcmp(value, "-conv")==0) {
+			if (strcmp(value, "-conv") == 0) {
 				for (int j = 0; j < 10; j++) colZap[j] = 0;
 				for (int j = 0; j < nextValueZ; j++) {
 					if (nextValue[j] == ',') zap++;
 					colZap[zap]++;
 				}
-				char ** conv = new char*[zap+1];
+				char ** conv = new char*[zap + 1];
 				for (int j = 0; j <= zap; j++) conv[j] = new char[colZap[j]];
 				zap = 0;
 				for (int j = 0; j < nextValueZ; j++) {
@@ -438,9 +389,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	ReadFile(CharToLPWSTR(argv[argc - 2]), CharToLPWSTR(argv[argc - 1]));
+	
 	if (argc == 1) {
 		Helper();
 		//choose('-v', "E:\\help.txt", "E:\\help1.txt"); //debug
 	}
-	
+	return 0;
+
 }
